@@ -154,38 +154,95 @@ const els = {
 
 // ------------------------------------------------------------------ 标签页提示
 //
-// 回答结束时让浏览器标签「闪一下」并保留提示色（favicon 换色 + 标题前缀），
-// 用户回到这个标签页（聚焦 / 切回可见 / 点击按键）后自动恢复。
-const FAVICON_IDLE = "#10a37f";
-const FAVICON_DONE = "#f0a020";
+// 用 favicon 的颜色表示任务状态：空闲=绿色，执行中=蓝色，回答结束=琥珀色 + 打勾。
+// 回答结束时标签/任务栏图标闪一次，然后停在提示色；用户回到标签页后自动恢复。
+//
+// 注意：只改 <link rel="icon"> 的 href，Chrome/Edge（Windows 任务栏）经常不会刷新图标，
+// 所以这里每次都重新生成 PNG 并替换整个 link 元素。
+const FAVICON_COLORS = { idle: "#10a37f", running: "#1f6feb", done: "#f0a020" };
 const PAGE_TITLE = document.title || "Codex Web";
-const faviconLink = document.querySelector('link[rel="icon"]');
 let tabFlashTimers = [];
 let tabAlerting = false;
+let faviconState = "";
 
-function faviconDataUri(color) {
+// 没安装 canvas 时（例如 jsdom）退回 SVG data URI
+function svgFavicon(color, done) {
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">` +
     `<rect width="32" height="32" rx="8" fill="${color}"/>` +
-    `<path d="M9 20.5l7-11.5 7 11.5z" fill="white"/></svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+    (done
+      ? `<path d="M9 16.5l5 5 9-11" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+      : `<path d="M9 20.5l7-11.5 7 11.5z" fill="white"/></svg>`);
+  return { href: `data:image/svg+xml,${encodeURIComponent(svg)}`, type: "image/svg+xml" };
 }
 
-function setFaviconColor(color) {
-  if (faviconLink) faviconLink.href = faviconDataUri(color);
+function pngFavicon(color, done) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  const radius = 16;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(radius, 0);
+  ctx.arcTo(64, 0, 64, 64, radius);
+  ctx.arcTo(64, 64, 0, 64, radius);
+  ctx.arcTo(0, 64, 0, 0, radius);
+  ctx.arcTo(0, 0, 64, 0, radius);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = "#ffffff";
+  ctx.fillStyle = "#ffffff";
+  ctx.lineWidth = 7;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  if (done) {
+    ctx.moveTo(17, 34);
+    ctx.lineTo(28, 45);
+    ctx.lineTo(48, 21);
+    ctx.stroke();
+  } else {
+    ctx.moveTo(16, 43);
+    ctx.lineTo(32, 18);
+    ctx.lineTo(48, 43);
+    ctx.closePath();
+    ctx.fill();
+  }
+  try {
+    return { href: canvas.toDataURL("image/png"), type: "image/png" };
+  } catch {
+    return null;
+  }
 }
 
-// 闪烁一次（亮-暗-亮-暗-亮），最后停在提示色上并保持不变
+function setFaviconKind(name) {
+  const kind = FAVICON_COLORS[name] ? name : "idle";
+  if (faviconState === kind) return;
+  faviconState = kind;
+  document.documentElement.dataset.tabState = kind;
+  const icon = pngFavicon(FAVICON_COLORS[kind], kind === "done") || svgFavicon(FAVICON_COLORS[kind], kind === "done");
+  // 替换整个 link 元素，保证 Chrome/Edge 真的重绘标签与任务栏图标
+  for (const link of document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]')) link.remove();
+  const link = document.createElement("link");
+  link.rel = "icon";
+  link.type = icon.type;
+  link.sizes = "64x64";
+  link.href = icon.href;
+  document.head.appendChild(link);
+}
+
+// 闪烁一次（提示色-绿色-提示色-绿色-提示色），最后停在提示色上并保持不变
 function flashTabOnce() {
   clearTabFlash();
   tabAlerting = true;
-  const sequence = [FAVICON_DONE, FAVICON_IDLE, FAVICON_DONE, FAVICON_IDLE, FAVICON_DONE];
-  sequence.forEach((color, index) => {
+  const sequence = ["done", "idle", "done", "idle", "done"];
+  sequence.forEach((state, index) => {
     tabFlashTimers.push(
       setTimeout(() => {
-        setFaviconColor(color);
+        setFaviconKind(state);
         if (index === sequence.length - 1) {
-          setFaviconColor(FAVICON_DONE);
           document.title = `✅ ${PAGE_TITLE}`;
         }
       }, index * 220)
@@ -202,7 +259,7 @@ function resetTabAlert() {
   if (!tabAlerting && document.title === PAGE_TITLE) return;
   clearTabFlash();
   tabAlerting = false;
-  setFaviconColor(FAVICON_IDLE);
+  setFaviconKind(state.running ? "running" : "idle");
   document.title = PAGE_TITLE;
 }
 
@@ -212,6 +269,7 @@ document.addEventListener("visibilitychange", () => {
 });
 document.addEventListener("pointerdown", resetTabAlert, { passive: true });
 document.addEventListener("keydown", resetTabAlert);
+setFaviconKind("idle");
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (c) =>
@@ -953,6 +1011,12 @@ function setRunning(running) {
   if (running) {
     state.followBottom = true;
     state.runNotified = false;
+    // 新任务开始：清掉上一次的完成提示，图标切到「执行中」
+    resetTabAlert();
+    setFaviconKind("running");
+  } else if (!tabAlerting) {
+    // 任务结束但还没轮到闪烁提示时，先回到空闲图标
+    setFaviconKind("idle");
   }
   els.sendBtn.disabled = running || !canRunTasks();
   els.stopBtn.classList.toggle("hidden", !running);

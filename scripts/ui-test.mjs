@@ -11,8 +11,9 @@ const HERE = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const PUBLIC_DIR = path.join(HERE, "public");
 
 let JSDOM;
+let VirtualConsole;
 try {
-  ({ JSDOM } = await import("jsdom"));
+  ({ JSDOM, VirtualConsole } = await import("jsdom"));
 } catch {
   console.log("跳过前端测试：未安装 jsdom（执行 npm install 后再试）");
   process.exit(0);
@@ -35,7 +36,18 @@ const bad = (message) => {
 };
 const check = (message, condition) => (condition ? ok(message) : bad(message));
 
-const dom = new JSDOM(html, { url: "http://127.0.0.1:8790/", runScripts: "outside-only", pretendToBeVisual: true });
+// jsdom 没有 canvas 实现，favicon 会走 SVG 兜底分支；这里顺手屏蔽它的 not-implemented 噪音
+const virtualConsole = new VirtualConsole();
+virtualConsole.on("jsdomError", (error) => {
+  if (!/getContext|not implemented/i.test(String(error?.message || ""))) console.error(error);
+});
+virtualConsole.on("error", (message) => console.error(message));
+const dom = new JSDOM(html, {
+  url: "http://127.0.0.1:8790/",
+  runScripts: "outside-only",
+  pretendToBeVisual: true,
+  virtualConsole,
+});
 const { window } = dom;
 window.TextDecoder = TextDecoder;
 window.Response = Response;
@@ -47,7 +59,7 @@ const encoder = new TextEncoder();
 const events = [
   { type: "run.started", runId: "r1", cwd: "/tmp", model: "deepseek-flash", sandbox: "read-only" },
   { type: "thread.started", thread_id: "t1" },
-  { type: "item.completed", item: { id: "i1", type: "agent_message", text: "第一段回答" } },
+  { type: "item.completed", item: { id: "i1", type: "agent_message", text: "实时流式回答" } },
   {
     type: "item.completed",
     item: { id: "i2", type: "command_execution", command: "ls", aggregated_output: "a\nb", status: "completed", exit_code: 0 },
@@ -101,14 +113,17 @@ window.fetch = async (url) => {
   }
   if (String(url) === "/api/run") {
     let index = 0;
-    const stream = {
-      getReader: () => ({
-        read: async () => {
-          if (index >= events.length) return { done: true, value: undefined };
-          return { done: false, value: encoder.encode(`data: ${JSON.stringify(events[index++])}\n\n`) };
-        },
-      }),
-    };
+    // 真实的 ReadableStream：每个事件之间留出间隔，便于观察「执行中」状态
+    const stream = new ReadableStream({
+      async pull(controller) {
+        if (index >= events.length) {
+          controller.close();
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(events[index++])}\n\n`));
+      },
+    });
     return new window.Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } });
   }
   return json({});
@@ -125,13 +140,19 @@ messages.scrollTo = ({ top } = {}) => {
 
 window.eval(appJs);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const iconColor = () =>
-  decodeURIComponent(window.document.querySelector('link[rel="icon"]').href)
-    .match(/fill="(#[0-9a-f]{6})"/i)?.[1]
-    ?.toLowerCase();
+const iconHref = () => window.document.querySelector('link[rel="icon"]')?.href || "";
+const iconColor = () => {
+  const href = decodeURIComponent(iconHref());
+  if (!href.startsWith("data:image/svg")) return null; // 真实浏览器里是 canvas 生成的 PNG
+  return href.match(/fill="(#[0-9a-f]{6})"/i)?.[1]?.toLowerCase() || null;
+};
+const tabState = () => window.document.documentElement.dataset.tabState;
+const initialIconNode = window.document.querySelector('link[rel="icon"]');
 
 await sleep(60);
 check("登录后进入主界面", !window.document.getElementById("app").classList.contains("hidden"));
+check("初始图标状态是 idle", tabState() === "idle");
+check("初始只有一个 icon link", window.document.querySelectorAll('link[rel="icon"]').length === 1);
 
 console.log("== 回答过程中自动滑到底部");
 window.document.getElementById("promptInput").value = "生成一段很长的回答";
@@ -139,6 +160,7 @@ scrollHeight = 3000;
 window.document.getElementById("composer").dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
 await sleep(120);
 check("内容超出视口后仍然贴在最底部", messages.scrollTop === messages.scrollHeight);
+check("执行中图标状态是 running", tabState() === "running");
 
 messages.scrollTop = 100;
 messages.dispatchEvent(new window.Event("scroll"));
@@ -151,13 +173,20 @@ await sleep(60);
 check("点「跳到最底部」后恢复跟随", messages.scrollTop === messages.scrollHeight);
 
 console.log("== 回答结束后的标签提示");
-await sleep(700);
+await sleep(1400); // 等任务跑完 + 闪烁序列（5 步 × 220ms）结束
+check("流式回答内容已渲染到对话区", window.document.getElementById("messages").textContent.includes("实时流式回答"));
 check("标题带上完成标记", window.document.title.startsWith("✅"));
-check("favicon 保持提示色 #f0a020", iconColor() === "#f0a020");
+check("图标状态保持 done", tabState() === "done");
+check("图标 link 被整块替换（浏览器才会重绘任务栏图标）", window.document.querySelector('link[rel="icon"]') !== initialIconNode);
+check("替换后仍然只有一个 icon link", window.document.querySelectorAll('link[rel="icon"]').length === 1);
+check("图标内容是 data: 图片", iconHref().startsWith("data:image/"));
+if (iconColor()) check("兜底 SVG 图标是提示色 #f0a020", iconColor() === "#f0a020");
+check("完成状态没有残留的转圈元素", window.document.querySelectorAll(".assistant-head .spinner").length === 0);
 
 window.document.dispatchEvent(new window.Event("pointerdown", { bubbles: true }));
 await sleep(20);
-check("用户回到页面后 favicon 恢复 #10a37f", iconColor() === "#10a37f");
+check("用户回到页面后图标状态恢复 idle", tabState() === "idle");
+if (iconColor()) check("兜底 SVG 图标恢复默认色 #10a37f", iconColor() === "#10a37f");
 check("用户回到页面后标题恢复", window.document.title === "Codex Web");
 
 console.log("== 打开历史会话");
