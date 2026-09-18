@@ -71,7 +71,15 @@ const events = [
 const json = (body, status = 200) =>
   new window.Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
-window.fetch = async (url) => {
+const runBodies = [];
+window.fetch = async (url, options = {}) => {
+  if (String(url) === "/api/run" && options.body) {
+    try {
+      runBodies.push(JSON.parse(options.body));
+    } catch {
+      /* 忽略解析失败 */
+    }
+  }
   if (String(url) === "/api/session") {
     return json({
       username: "admin",
@@ -157,10 +165,22 @@ check("初始只有一个 icon link", window.document.querySelectorAll('link[rel
 console.log("== 回答过程中自动滑到底部");
 window.document.getElementById("promptInput").value = "生成一段很长的回答";
 scrollHeight = 3000;
+// 先用输入框下方的快捷选择切到「完全控制」，再提交任务
+const quickButtons = [...window.document.querySelectorAll("#sandboxQuick .sq-btn")];
+check("输入框下方有权限快捷选择", quickButtons.length === 3);
+check(
+  "「完全控制」对应 danger-full-access",
+  quickButtons.some((el) => el.textContent === "完全控制" && el.dataset.sandbox === "danger-full-access")
+);
+quickButtons.find((el) => el.dataset.sandbox === "danger-full-access").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+check("点击后顶部下拉同步为完全访问", window.document.getElementById("sandboxSelect").value === "danger-full-access");
+check("底部提示显示当前模式", window.document.querySelector(".composer-note").textContent.includes("当前模式：完全访问"));
+
 window.document.getElementById("composer").dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
 await sleep(120);
 check("内容超出视口后仍然贴在最底部", messages.scrollTop === messages.scrollHeight);
 check("执行中图标状态是 running", tabState() === "running");
+check("提交任务时带上所选沙箱模式", runBodies.at(-1)?.sandbox === "danger-full-access", JSON.stringify(runBodies.at(-1)?.sandbox));
 
 messages.scrollTop = 100;
 messages.dispatchEvent(new window.Event("scroll"));

@@ -27,6 +27,7 @@
     "smoke": "bash scripts/smoke-test.sh",
     "test": "npm run test:ui",
     "test:ui": "node scripts/ui-test.mjs",
+    "test:browser": "node scripts/browser-test.mjs",
     "hash-password": "node hash-password.js",
     "user-admin": "node user-admin.js",
     "model-admin": "node model-admin.js"

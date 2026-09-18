@@ -22,7 +22,12 @@ node --check lib/store.js && node --check lib/secrets.js
 node --check user-admin.js && node --check model-admin.js
 bash scripts/smoke-test.sh                  # 不需要真实 API Key，会校验加密、脱敏与权限拦截
 npm install && npm run test:ui              # 前端行为测试（需要 jsdom，仅开发依赖）
+npm i -D puppeteer && npm run test:browser  # 可选：真实 Chrome 的界面/布局测试（约 180MB）
 ```
+
+浏览器测试会覆盖「弹窗能不能滚到保存按钮」「输入框下方的权限快捷选择」这类无法用
+jsdom 验证的布局问题；已装有系统 Chrome 时可以用
+`PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome npm run test:browser` 避免重复下载。
 
 ## 代码约定
 

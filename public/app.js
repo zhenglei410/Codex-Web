@@ -54,6 +54,8 @@ const els = {
   topbarTitle: $("#topbarTitle"),
   modelSelect: $("#modelSelect"),
   sandboxSelect: $("#sandboxSelect"),
+  sandboxQuick: $("#sandboxQuick"),
+  sandboxQuickHint: $("#sandboxQuickHint"),
   messages: $("#messages"),
   emptyState: $("#emptyState"),
   emptyCwd: $("#emptyCwd"),
@@ -530,6 +532,89 @@ function populateModelSelect(session) {
 // 按账号权限调整界面：能做什么、能选到哪一档
 const SANDBOX_ORDER = { "read-only": 0, "workspace-write": 1, "danger-full-access": 2 };
 const SANDBOX_LABEL = { "read-only": "只读", "workspace-write": "工作区可写", "danger-full-access": "完全访问" };
+// 输入框下方的快捷选择：完全控制 = danger-full-access
+const SANDBOX_QUICK = [
+  { value: "danger-full-access", label: "完全控制", hint: "完全访问：Codex 可以读写整台机器（danger-full-access）" },
+  { value: "workspace-write", label: "工作区可写", hint: "只能修改工作目录里的文件（workspace-write）" },
+  { value: "read-only", label: "只读", hint: "只读模式：只能查看文件、执行只读命令（read-only）" },
+];
+
+function sandboxMaxRank() {
+  return SANDBOX_ORDER[state.permissions.sandboxMax] ?? SANDBOX_ORDER["danger-full-access"];
+}
+
+function renderSandboxQuick() {
+  if (!els.sandboxQuick) return;
+  els.sandboxQuick.innerHTML = "";
+  for (const item of SANDBOX_QUICK) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "sq-btn";
+    button.dataset.sandbox = item.value;
+    button.textContent = item.label;
+    button.title = item.hint;
+    button.addEventListener("click", () => setSandbox(item.value, { notify: true }));
+    els.sandboxQuick.appendChild(button);
+  }
+}
+
+// 同步顶部下拉与输入框下方的快捷选择，并按账号的权限上限禁用超出的档位
+function syncSandboxControls() {
+  const maxRank = sandboxMaxRank();
+  if ((SANDBOX_ORDER[state.sandbox] ?? 9) > maxRank) {
+    state.sandbox = state.permissions.sandboxMax || "read-only";
+  }
+  for (const option of [...els.sandboxSelect.options]) {
+    option.disabled = SANDBOX_ORDER[option.value] > maxRank;
+  }
+  els.sandboxSelect.value = state.sandbox;
+  els.sandboxSelect.disabled = maxRank === 0;
+
+  const quickHidden = !canRunTasks() || state.mustChangePassword;
+  els.sandboxQuick?.classList.toggle("hidden", quickHidden);
+  els.sandboxQuickHint?.classList.toggle("hidden", quickHidden);
+  if (els.sandboxQuickHint) {
+    els.sandboxQuickHint.textContent = state.sandbox === "danger-full-access" ? "当前：完全访问本机" : "";
+  }
+  for (const button of $$(".sq-btn", els.sandboxQuick || document)) {
+    const rank = SANDBOX_ORDER[button.dataset.sandbox] ?? 9;
+    button.disabled = rank > maxRank;
+    button.classList.toggle("active", button.dataset.sandbox === state.sandbox);
+  }
+}
+
+function setSandbox(value, { notify = false } = {}) {
+  if (SANDBOX_ORDER[value] === undefined) return;
+  if (SANDBOX_ORDER[value] > sandboxMaxRank()) {
+    toast("当前账号的权限上限不允许这个模式");
+    return;
+  }
+  state.sandbox = value;
+  syncSandboxControls();
+  updateComposerNote();
+  if (notify) {
+    toast(
+      value === "danger-full-access"
+        ? "已切换为完全控制：Codex 可以读写这台机器的任何文件"
+        : `已切换为${SANDBOX_LABEL[value]}`
+    );
+  }
+}
+
+function updateComposerNote() {
+  if (!els.composerNote) return;
+  const perms = state.permissions || {};
+  const policy = state.policy || {};
+  const notes = [`当前模式：${SANDBOX_LABEL[state.sandbox] || state.sandbox}`];
+  notes.push(`权限上限：${SANDBOX_LABEL[perms.sandboxMax] || perms.sandboxMax || "-"}`);
+  if (policy.enabled === false) notes.push("本机策略：已停用");
+  else {
+    notes.push(`工作目录：${(policy.allowedRoots || []).join("、") || "不限制"}`);
+    if (policy.allowNetwork === false) notes.push("禁止联网");
+    if (policy.maxRunMinutes) notes.push(`单任务 ≤ ${policy.maxRunMinutes} 分钟`);
+  }
+  els.composerNote.textContent = notes.join(" · ");
+}
 
 function canRunTasks() {
   return state.permissions.run !== false;
@@ -560,16 +645,8 @@ function applyPermissions(session) {
     els.emptyCwd.textContent = state.cwd;
   }
 
-  // 权限模式只保留账号允许的档位
-  const maxRank = SANDBOX_ORDER[perms.sandboxMax] ?? SANDBOX_ORDER["danger-full-access"];
-  for (const option of [...els.sandboxSelect.options]) {
-    option.disabled = SANDBOX_ORDER[option.value] > maxRank;
-  }
-  if ((SANDBOX_ORDER[state.sandbox] ?? 9) > maxRank) {
-    state.sandbox = perms.sandboxMax;
-    els.sandboxSelect.value = state.sandbox;
-  }
-  els.sandboxSelect.disabled = maxRank === 0;
+  // 权限模式：顶部下拉 + 输入框下方快捷选择，只保留账号允许的档位
+  syncSandboxControls();
 
   // 任务提交（强制改密期间一并锁住）
   const locked = state.mustChangePassword;
@@ -581,16 +658,8 @@ function applyPermissions(session) {
       ? "给 Codex 下达任务…（Enter 发送，Shift+Enter 换行）"
       : "当前账号没有执行 Codex 的权限";
 
-  // 底部提示：把当前生效的权限边界直接写出来
-  const policy = state.policy || {};
-  const notes = [`权限上限：${SANDBOX_LABEL[perms.sandboxMax] || perms.sandboxMax}`];
-  if (policy.enabled === false) notes.push("本机策略：已停用");
-  else {
-    notes.push(`工作目录：${(policy.allowedRoots || []).join("、") || "不限制"}`);
-    if (policy.allowNetwork === false) notes.push("禁止联网");
-    if (policy.maxRunMinutes) notes.push(`单任务 ≤ ${policy.maxRunMinutes} 分钟`);
-  }
-  if (els.composerNote) els.composerNote.textContent = notes.join(" · ");
+  // 底部提示：把当前模式与权限边界直接写出来
+  updateComposerNote();
 }
 
 els.loginForm.addEventListener("submit", async (event) => {
@@ -1194,7 +1263,8 @@ els.modelSelect.addEventListener("change", (event) => {
   state.model = event.target.value;
 });
 els.sandboxSelect.addEventListener("change", (event) => {
-  state.sandbox = event.target.value;
+  // 顶部下拉改了以后，输入框下方的快捷选择要跟着高亮
+  setSandbox(event.target.value);
 });
 
 // ------------------------------------------------------------------ cwd picker
@@ -1453,6 +1523,8 @@ function openUserForm(user) {
   els.ufDisabled.disabled = user?.username === state.username;
   syncUserFormRole();
   els.ufDisplay.focus();
+  // 表单在列表下方，滚动到可见位置，避免「保存」按钮在视野之外
+  els.userForm.scrollIntoView?.({ block: "nearest" });
 }
 
 async function signOutUser(user) {
@@ -1941,4 +2013,6 @@ async function refreshSession() {
   }
 }
 
+// 状态相关的常量在上面声明完成后才能渲染快捷选择
+renderSandboxQuick();
 boot();

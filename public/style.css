@@ -466,6 +466,48 @@ details.reasoning .reasoning-text { margin-top: 8px; white-space: pre-wrap; line
 }
 .stop-btn:hover { background: var(--bg-hover); }
 .composer-note { max-width: 780px; margin: 8px auto 0; text-align: center; font-size: 11px; color: var(--text-dim); }
+.composer-quick {
+  max-width: 780px;
+  margin: 10px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.sandbox-quick {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--bg-hover);
+  border-radius: 999px;
+}
+.sq-btn {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 12.5px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sq-btn:hover:not(:disabled) { color: var(--text); background: var(--bg-input); }
+.sq-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.sq-btn.active[data-sandbox="danger-full-access"] {
+  background: #c0392b;
+  border-color: #c0392b;
+}
+.sq-btn:disabled { opacity: 0.35; cursor: default; }
+.sandbox-quick-hint { font-size: 11px; color: var(--text-dim); }
+@media (max-width: 640px) {
+  .sq-btn { padding: 5px 9px; font-size: 12px; }
+}
 
 /* ---------------- modal ---------------- */
 .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); display: grid; place-items: center; z-index: 50; }
@@ -505,7 +547,17 @@ details.reasoning .reasoning-text { margin-top: 8px; white-space: pre-wrap; line
 .modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-top: 1px solid var(--border); }
 .modal-card.small { height: auto; max-width: 420px; }
 .modal-card.wide { width: min(760px, 94vw); height: min(680px, 88vh); }
-.modal-body { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+/* 弹窗内容区自己滚动：否则表单比卡片高时，底部的「保存」按钮会被卡片裁掉 */
+.modal-body {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .modal-body label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-muted); }
 .modal-body input {
   background: var(--bg-input);
@@ -577,7 +629,15 @@ details.reasoning .reasoning-text { margin-top: 8px; white-space: pre-wrap; line
 .users-toolbar { display: flex; align-items: center; gap: 10px; }
 .users-toolbar .primary-btn { padding: 7px 12px; font-size: 13px; }
 
-.users-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; flex: 1; min-height: 80px; }
+.users-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  flex: 0 1 auto;
+  min-height: 80px;
+  max-height: 42vh;
+}
 .user-row {
   display: flex; align-items: flex-start; gap: 10px;
   border: 1px solid var(--border);
@@ -609,8 +669,18 @@ details.reasoning .reasoning-text { margin-top: 8px; white-space: pre-wrap; line
   display: flex;
   flex-direction: column;
   gap: 10px;
-  overflow-y: auto;
-  max-height: 60%;
+  /* 让 .modal-body 统一滚动，表单不再自己裁剪 */
+  overflow: visible;
+  max-height: none;
+  flex: 0 0 auto;
+}
+/* 表单很长时，把「保存」固定在弹窗底部，滚动过程中一直可见 */
+.user-form .modal-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--bg-elevated);
+  border-radius: 0 0 11px 11px;
 }
 .user-form-head { display: flex; align-items: center; justify-content: space-between; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
