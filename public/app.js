@@ -17,6 +17,7 @@ const state = {
   search: "",
   hasNewBelow: false,
   policy: {},
+  mustChangePassword: false,
 };
 
 const els = {
@@ -69,6 +70,7 @@ const els = {
   pwdNew: $("#pwdNew"),
   pwdConfirm: $("#pwdConfirm"),
   pwdError: $("#pwdError"),
+  pwdNotice: $("#pwdNotice"),
   userRoleChip: $("#userRoleChip"),
   usersModal: $("#usersModal"),
   usersClose: $("#usersClose"),
@@ -92,6 +94,7 @@ const els = {
   ufThreads: $("#ufThreads"),
   ufThreadsAll: $("#ufThreadsAll"),
   ufManage: $("#ufManage"),
+  ufMustChange: $("#ufMustChange"),
   ufDisabled: $("#ufDisabled"),
   threadListWrap: $("#threadListWrap"),
   cwdModal: $("#cwdModal"),
@@ -325,6 +328,15 @@ async function api(path, options = {}) {
     ...options,
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
   });
+  // 强制改密：任何被拦下的接口都统一把用户拉回改密弹窗
+  if (res.status === 403) {
+    const data = await res.clone().json().catch(() => null);
+    if (data?.code === "password_change_required") {
+      state.mustChangePassword = true;
+      openPasswordModal(true);
+      toast(data.error || "请先修改密码");
+    }
+  }
   return res;
 }
 
@@ -347,6 +359,7 @@ function enterApp(session) {
   state.sandbox = session.sandbox || "danger-full-access";
   state.model = session.model || "";
   state.policy = session.policy || {};
+  state.mustChangePassword = Boolean(session.mustChangePassword);
 
   els.loginScreen.classList.add("hidden");
   els.app.classList.remove("hidden");
@@ -363,6 +376,12 @@ function enterApp(session) {
   applyPermissions(session);
   loadThreads();
   updateScrollNav();
+
+  // 首次登录/被重置密码：先改密码，其他功能等改完再用
+  if (state.mustChangePassword) {
+    els.promptInput.blur();
+    openPasswordModal(true);
+  }
 }
 
 // 模型下拉框由服务端配置生成：只列出已配置供应商的模型
@@ -430,12 +449,15 @@ function applyPermissions(session) {
   }
   els.sandboxSelect.disabled = maxRank === 0;
 
-  // 任务提交
-  els.sendBtn.disabled = !canRunTasks();
-  els.promptInput.disabled = !canRunTasks();
-  els.promptInput.placeholder = canRunTasks()
-    ? "给 Codex 下达任务…（Enter 发送，Shift+Enter 换行）"
-    : "当前账号没有执行 Codex 的权限";
+  // 任务提交（强制改密期间一并锁住）
+  const locked = state.mustChangePassword;
+  els.sendBtn.disabled = locked || !canRunTasks();
+  els.promptInput.disabled = locked || !canRunTasks();
+  els.promptInput.placeholder = locked
+    ? "请先修改密码"
+    : canRunTasks()
+      ? "给 Codex 下达任务…（Enter 发送，Shift+Enter 换行）"
+      : "当前账号没有执行 Codex 的权限";
 
   // 底部提示：把当前生效的权限边界直接写出来
   const policy = state.policy || {};
@@ -1074,16 +1096,25 @@ els.cwdPick.addEventListener("click", () => {
 
 // ------------------------------------------------------------------ password
 
-function openPasswordModal() {
+// forced = true 时表示「还没改密码，别的功能都不能用」，不允许关闭
+function openPasswordModal(forced = false) {
+  if (forced) state.mustChangePassword = true;
   els.pwdForm.reset();
   els.pwdError.classList.add("hidden");
+  els.pwdNotice.classList.toggle("hidden", !state.mustChangePassword);
+  els.pwdClose.classList.toggle("hidden", state.mustChangePassword);
   els.pwdModal.classList.remove("hidden");
   els.pwdCurrent.focus();
 }
 
-els.pwdClose.addEventListener("click", () => els.pwdModal.classList.add("hidden"));
+function closePasswordModal() {
+  if (state.mustChangePassword) return; // 强制改密时只能改完再关
+  els.pwdModal.classList.add("hidden");
+}
+
+els.pwdClose.addEventListener("click", closePasswordModal);
 els.pwdModal.addEventListener("click", (event) => {
-  if (event.target === els.pwdModal) els.pwdModal.classList.add("hidden");
+  if (event.target === els.pwdModal) closePasswordModal();
 });
 
 els.pwdForm.addEventListener("submit", async (event) => {
@@ -1113,7 +1144,12 @@ els.pwdForm.addEventListener("submit", async (event) => {
     }
     els.pwdModal.classList.add("hidden");
     els.pwdForm.reset();
+    state.mustChangePassword = false;
+    els.pwdNotice.classList.add("hidden");
+    els.pwdClose.classList.remove("hidden");
     toast(data.message || "密码已更新");
+    // 改密会让本账号其他设备的登录失效，这里直接重新登录一次最干净
+    setTimeout(() => location.reload(), 1200);
   } catch (err) {
     els.pwdError.textContent = `网络错误：${err.message}`;
     els.pwdError.classList.remove("hidden");
@@ -1185,6 +1221,7 @@ function renderUsers() {
           <code>${escapeHtml(user.username)}</code>
           ${user.role === "admin" ? '<span class="tag admin">管理员</span>' : '<span class="tag">成员</span>'}
           ${isSelf ? '<span class="tag me">当前登录</span>' : ""}
+          ${user.mustChangePassword ? '<span class="tag off">需改密码</span>' : ""}
           ${user.disabled ? '<span class="tag off">已禁用</span>' : ""}
         </div>
         <div class="user-meta">
@@ -1251,6 +1288,8 @@ function openUserForm(user) {
   els.ufThreads.checked = perms.threads !== false;
   els.ufThreadsAll.checked = Boolean(perms.threadsAll);
   els.ufManage.checked = Boolean(perms.manageUsers);
+  // 新账号默认要求首次登录改密码；编辑时反映当前状态
+  els.ufMustChange.checked = user ? Boolean(user.mustChangePassword) : true;
   els.ufDisabled.checked = Boolean(user?.disabled);
   els.ufDisabled.disabled = user?.username === state.username;
   syncUserFormRole();
@@ -1299,6 +1338,7 @@ els.userForm.addEventListener("submit", async (event) => {
     displayName: els.ufDisplay.value.trim(),
     role: els.ufRole.value,
     disabled: els.ufDisabled.checked,
+    mustChangePassword: els.ufMustChange.checked,
     permissions: {
       run: els.ufRun.checked,
       browse: els.ufBrowse.checked,

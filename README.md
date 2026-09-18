@@ -16,7 +16,7 @@
 | 浏览器驱动 Codex | 后端把 `codex exec --json` 的 JSONL 事件转成 SSE，前端渲染成对话气泡、命令行卡片（含输出与退出码）、文件变更列表与 token 用量 |
 | 多模型供应商 | 在网页里添加任意 OpenAI 兼容供应商（DeepSeek、OpenAI、通义、智谱、Moonshot、Ollama、vLLM…），右上角随时切换本次任务用的大模型 |
 | API Key 脱敏保存 | 密钥以 AES-256-GCM 密文写入 `config.json`，界面与接口只返回 `sk-****d00a`；运行时只通过子进程**环境变量**注入，命令行参数、日志、审计记录里都不会出现明文 |
-| 多账号与角色 | 管理员 / 成员两种角色，逐项权限（提交任务、浏览目录、查看会话、管理账号…），每个账号可单独设工作目录与沙箱上限 |
+| 多账号与角色 | 管理员 / 成员两种角色，逐项权限（提交任务、浏览目录、查看会话、管理账号…），每个账号可单独设工作目录与沙箱上限；支持「首次登录必须改密码」 |
 | 本机权限控制 | 管理员可限制 Codex 能进哪些目录、禁止哪些命令、不能写哪些路径，并设置单任务超时、联网开关、并发上限；命中即实时终止任务并留下审计记录 |
 | 会话与审计 | 会话归属按账号隔离（成员只看自己的）；每次任务都有审计日志（谁、在哪、用什么模型、结果如何、是否被拦截） |
 | 零依赖部署 | 后端只用 Node 内置模块，无 npm 依赖；提供 systemd、nginx、Docker 等多种部署方式 |
@@ -92,14 +92,13 @@ cd codex-web
 bash scripts/smoke-test.sh   # 可选：确认功能正常（不需要真实 API Key）
 ```
 
-### 4. 初始化配置与管理员账号
+### 4. 初始化配置
 
 ```bash
 cp config.example.json config.json
 # 生成会话密钥（务必替换掉示例值）
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-# 把输出填进 config.json 的 sessionSecret，然后创建管理员账号：
-node user-admin.js add admin '你的强密码' --admin --name 管理员
+# 把输出填进 config.json 的 sessionSecret 即可
 ```
 
 ### 5. 启动
@@ -108,12 +107,18 @@ node user-admin.js add admin '你的强密码' --admin --name 管理员
 node server.js          # 默认监听 127.0.0.1:8790
 ```
 
-浏览器打开 `http://127.0.0.1:8790` 即可登录使用。生产环境建议用 systemd + nginx：
+浏览器打开 `http://127.0.0.1:8790`，用**默认账号 `admin` / 默认密码 `admin`** 登录。
+首次登录会被强制要求设置新密码（至少 8 位），改完才能使用其他功能。
+
+生产环境建议用 systemd + nginx：
 
 ```bash
 sudo bash scripts/install.sh    # 安装到 /opt/codex-web 并注册 systemd 服务
 sudo systemctl status codex-web
 ```
+
+> 默认口令是公开的：**改密之前不要把服务暴露到公网**。想跳过强制改密、直接设置初始密码，可以执行
+> `node user-admin.js passwd admin '你的强密码'`（再加 `--force-change` 表示下次登录仍要求改密）。
 
 nginx 反代与 HTTPS 证书的完整步骤见 [docs/deployment.md](docs/deployment.md)。
 
@@ -202,12 +207,15 @@ node user-admin.js disable alice
 逐项权限：提交任务、浏览目录、查看自己的会话、查看他人会话、管理账号、权限上限（可选的最高沙箱）、默认工作目录。
 成员选择的沙箱超出上限时会自动降级到上限，而不是直接失败。
 
+「首次登录需改密码」：网页新增账号时默认勾选（命令行加 `--must-change`），管理员重置他人密码后也会自动勾上。
+处于该状态的账号在改密前只能访问登录、退出、改密接口，其余接口一律返回 403，界面会自动弹出改密窗口。
+
 ## 配置项（config.json）
 
 | 字段 | 含义 |
 | --- | --- |
 | `host` / `port` | 监听地址与端口，默认 `127.0.0.1:8790`（只经 nginx 对外） |
-| `users` | 账号数组：`username` / `displayName` / `passwordHash` / `role` / `disabled` / `sessionVersion` / `permissions` |
+| `users` | 账号数组：`username` / `displayName` / `passwordHash` / `role` / `disabled` / `sessionVersion` / `mustChangePassword` / `permissions` |
 | `sessionSecret` | 会话 Cookie 的 HMAC 密钥，泄露等于可伪造登录 |
 | `sessionTtlHours` | 登录有效期（小时） |
 | `codexBin` / `codexHome` | Codex 可执行文件与 `CODEX_HOME` 配置目录 |

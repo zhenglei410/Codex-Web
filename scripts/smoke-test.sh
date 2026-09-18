@@ -14,7 +14,9 @@ FAIL=0
 
 cleanup() {
   [[ -n "${SERVER_PID:-}" ]] && kill "$SERVER_PID" 2>/dev/null || true
+  [[ -n "${SERVER2_PID:-}" ]] && kill "$SERVER2_PID" 2>/dev/null || true
   rm -rf "$WORK"
+  [[ -n "${WORK2:-}" ]] && rm -rf "$WORK2"
 }
 trap cleanup EXIT
 
@@ -176,6 +178,66 @@ sleep 0.3
 AUDIT=$(curl -sS -b "$COOKIE" "$BASE/api/admin/audit?limit=10")
 check "审计里有被拦截的任务" "$(jq -r '[.entries[] | select(.blockedReason=="policy")] | length' <<<"$AUDIT")" "1"
 check "审计不记录明文密钥" "$(grep -c "$FAKE_KEY" <<<"$AUDIT" || true)" "0"
+
+# ---------------------------------------------------------------------------
+# 第二阶段：默认账号 admin/admin + 首次登录强制改密（用 config.example.json 起一个独立实例）
+# ---------------------------------------------------------------------------
+echo
+echo "==> 首次部署流程：默认账号 admin/admin，登录后强制改密"
+WORK2="$(mktemp -d)"
+PORT2=$((PORT + 1))
+cp "$HERE/config.example.json" "$WORK2/config.json"
+node -e '
+const fs = require("fs");
+const file = process.argv[1];
+const port = process.argv[2];
+const cfg = JSON.parse(fs.readFileSync(file, "utf8"));
+cfg.port = Number(port);
+cfg.sessionSecret = "smoke-test-secret-smoke-test-secret-smoke-test-secret";
+cfg.codexBin = process.argv[3];
+cfg.defaultCwd = process.argv[4];
+fs.writeFileSync(file, JSON.stringify(cfg, null, 2) + "\n", { mode: 0o600 });
+' "$WORK2/config.json" "$PORT2" "$WORK/fake-codex" "$WORK/ws"
+
+CODEX_WEB_CONFIG="$WORK2/config.json" CODEX_WEB_DATA_DIR="$WORK2/data" node "$HERE/server.js" >"$WORK2/server.log" 2>&1 &
+SERVER2_PID=$!
+BASE2="http://127.0.0.1:$PORT2"
+for _ in $(seq 1 40); do
+  curl -fsS -o /dev/null "$BASE2/api/session" 2>/dev/null && break
+  sleep 0.25
+done
+COOKIE2="$WORK2/cookie.txt"
+check "默认账号 admin/admin 能登录" \
+  "$(curl -sS -o /dev/null -w '%{http_code}' -c "$COOKIE2" -X POST "$BASE2/api/login" \
+    -H 'Content-Type: application/json' -d '{"username":"admin","password":"admin"}')" "200"
+check "会话标记需要改密码" "$(curl -sS -b "$COOKIE2" "$BASE2/api/session" | jq -r '.mustChangePassword')" "true"
+BLOCKED=$(curl -sS -o "$WORK2/blocked.json" -w '%{http_code}' -b "$COOKIE2" "$BASE2/api/admin/models")
+check "改密前其他接口被拦（403）" "$BLOCKED" "403"
+check "拦截原因带 code" "$(jq -r '.code' "$WORK2/blocked.json")" "password_change_required"
+check "改密前不能提交任务（403）" \
+  "$(curl -sS -o /dev/null -w '%{http_code}' -b "$COOKIE2" -X POST "$BASE2/api/run" \
+    -H 'Content-Type: application/json' -d '{"prompt":"hi"}')" "403"
+check "新密码太短会被拒绝" \
+  "$(curl -sS -o /dev/null -w '%{http_code}' -b "$COOKIE2" -X POST "$BASE2/api/password" \
+    -H 'Content-Type: application/json' -d '{"currentPassword":"admin","newPassword":"short"}')" "400"
+check "改成和当前一样会被拒绝" \
+  "$(curl -sS -o /dev/null -w '%{http_code}' -b "$COOKIE2" -X POST "$BASE2/api/password" \
+    -H 'Content-Type: application/json' -d '{"currentPassword":"admin","newPassword":"admin"}')" "400"
+check "修改密码成功" \
+  "$(curl -sS -o /dev/null -w '%{http_code}' -b "$COOKIE2" -c "$COOKIE2" -X POST "$BASE2/api/password" \
+    -H 'Content-Type: application/json' -d '{"currentPassword":"admin","newPassword":"new-admin-pass"}')" "200"
+check "改密后 mustChangePassword 变成 false" \
+  "$(curl -sS -b "$COOKIE2" "$BASE2/api/session" | jq -r '.mustChangePassword')" "false"
+check "改密后其他接口恢复（200）" "$(curl -sS -o /dev/null -w '%{http_code}' -b "$COOKIE2" "$BASE2/api/admin/models")" "200"
+check "旧密码不再可用" \
+  "$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$BASE2/api/login" \
+    -H 'Content-Type: application/json' -d '{"username":"admin","password":"admin"}')" "401"
+check "新密码可以登录" \
+  "$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$BASE2/api/login" \
+    -H 'Content-Type: application/json' -d '{"username":"admin","password":"new-admin-pass"}')" "200"
+check "配置文件里不再有强制改密标记" \
+  "$(jq -r '.users[0].mustChangePassword' "$WORK2/config.json")" "false"
+kill "$SERVER2_PID" 2>/dev/null || true
 
 echo
 echo "通过 $PASS 项，失败 $FAIL 项"

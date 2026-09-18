@@ -2,8 +2,9 @@
 // 账号管理 CLI（没有管理员可登录时的兜底手段，日常用网页里的「账号」页面即可）
 // 用法：
 //   node user-admin.js list
-//   node user-admin.js add <账号> <密码> [--admin] [--name 显示名] [--sandbox read-only|workspace-write|danger-full-access] [--cwd /root]
-//   node user-admin.js passwd <账号> <新密码>
+//   node user-admin.js add <账号> <密码> [--admin] [--name 显示名] [--sandbox read-only|workspace-write|danger-full-access]
+//                                            [--cwd /root] [--must-change]
+//   node user-admin.js passwd <账号> <新密码> [--force-change]
 //   node user-admin.js role <账号> admin|member
 //   node user-admin.js enable|disable <账号>
 //   node user-admin.js delete <账号>
@@ -47,8 +48,8 @@ function parseFlags(args) {
 function usage() {
   console.log(`用法：
   node user-admin.js list
-  node user-admin.js add <账号> <密码> [--admin] [--name 显示名] [--sandbox read-only|workspace-write|danger-full-access] [--cwd /root]
-  node user-admin.js passwd <账号> <新密码>
+  node user-admin.js add <账号> <密码> [--admin] [--name 显示名] [--sandbox read-only|workspace-write|danger-full-access] [--cwd /root] [--must-change]
+  node user-admin.js passwd <账号> <新密码> [--force-change]
   node user-admin.js role <账号> admin|member
   node user-admin.js enable|disable <账号>
   node user-admin.js delete <账号>`);
@@ -63,7 +64,9 @@ switch (command) {
       const perms = normalizePermissions(user.permissions, user.role);
       const state = user.disabled ? "已禁用" : "正常";
       console.log(
-        `${user.username.padEnd(16)} ${user.role.padEnd(7)} ${state.padEnd(6)} 沙箱上限=${perms.sandboxMax.padEnd(18)} 目录=${perms.defaultCwd}`
+        `${user.username.padEnd(16)} ${user.role.padEnd(7)} ${state.padEnd(6)} 沙箱上限=${perms.sandboxMax.padEnd(18)} 目录=${perms.defaultCwd}${
+          user.mustChangePassword ? "  [待改密码]" : ""
+        }`
       );
     }
     break;
@@ -104,14 +107,16 @@ switch (command) {
       sessionVersion: 0,
       createdAt: new Date().toISOString(),
       lastLoginAt: "",
+      mustChangePassword: Boolean(flags["must-change"]),
       permissions,
     });
     save(cfg);
-    console.log(`已创建账号 ${username}（${role}）`);
+    console.log(`已创建账号 ${username}（${role}）${flags["must-change"] ? "，首次登录需要修改密码" : ""}`);
     break;
   }
   case "passwd": {
     const [username, password] = rest;
+    const flags = parseFlags(rest.slice(2));
     const user = find(cfg, username);
     if (!user) {
       console.error(`账号 ${username} 不存在`);
@@ -123,8 +128,13 @@ switch (command) {
     }
     user.passwordHash = hashPassword(password);
     user.sessionVersion = Number(user.sessionVersion || 0) + 1;
+    if (flags["force-change"]) user.mustChangePassword = true;
     save(cfg);
-    console.log(`已重置 ${username} 的密码（该账号其他登录已失效）`);
+    console.log(
+      `已重置 ${username} 的密码（该账号其他登录已失效）${
+        flags["force-change"] ? "，下次登录需要修改密码" : ""
+      }`
+    );
     break;
   }
   case "role": {

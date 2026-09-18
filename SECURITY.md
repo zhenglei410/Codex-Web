@@ -12,6 +12,8 @@ Codex Web 让你在浏览器里驱动**本机**的 Codex CLI。它天生就是�
 - 成员账号默认给 `read-only` 或 `workspace-write`，并开启审计日志；
 - `config.json`、`data/secrets.key`、`data/audit.jsonl` 保持 `600` 权限；
 - 需要真正隔离时使用容器或虚拟机，只挂载工作目录（见 docs/deployment.md）。
+- 首次部署的默认账号是 `admin` / `admin`，服务会强制要求首次登录改密；
+  **在改密之前不要把服务暴露到公网**（先在内网/本地登录并改掉密码，再开放端口更稳妥）。
 
 ## 已知的安全边界
 

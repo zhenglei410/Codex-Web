@@ -20,6 +20,7 @@
         </div>
         <h1>Codex Web</h1>
         <p class="login-sub">登录后即可在浏览器里驱动本机 Codex CLI</p>
+        <p class="login-hint">首次部署的默认账号与密码均为 <code>admin</code>，登录后会要求修改密码</p>
         <label>
           <span>账号</span>
           <input id="loginUser" type="text" autocomplete="username" value="admin" required />
@@ -205,6 +206,7 @@
               <label class="perm"><input id="ufThreads" type="checkbox" /><span>查看自己的会话</span></label>
               <label class="perm"><input id="ufThreadsAll" type="checkbox" /><span>查看他人会话</span></label>
               <label class="perm"><input id="ufManage" type="checkbox" /><span>管理账号</span></label>
+              <label class="perm"><input id="ufMustChange" type="checkbox" /><span>首次登录需改密码</span></label>
               <label class="perm"><input id="ufDisabled" type="checkbox" /><span>禁用账号</span></label>
             </div>
             <div id="userFormError" class="login-error hidden"></div>
@@ -437,6 +439,10 @@
           <button type="button" id="pwdClose" class="icon-btn">✕</button>
         </div>
         <div class="modal-body">
+          <div id="pwdNotice" class="policy-note hidden">
+            这是首次登录（或管理员刚重置了密码），必须先设置一个新密码才能使用其他功能。
+            新密码至少 8 位，不能与当前密码相同。
+          </div>
           <label><span>当前密码</span><input id="pwdCurrent" type="password" autocomplete="current-password" required /></label>
           <label><span>新密码（至少 8 位）</span><input id="pwdNew" type="password" autocomplete="new-password" minlength="8" required /></label>
           <label><span>确认新密码</span><input id="pwdConfirm" type="password" autocomplete="new-password" minlength="8" required /></label>

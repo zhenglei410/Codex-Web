@@ -21,7 +21,8 @@ Zero runtime dependencies: Node.js ≥ 20 plus the `codex` binary.
   commands, protect paths such as `/etc` or `~/.ssh`, cap run time, toggle workspace network access,
   limit concurrency, and keep an audit log of every task.
 - **Multi-account with per-user permissions** — admin/member roles, per-account sandbox ceiling and
-  working directory, session ownership so members only see their own threads.
+  working directory, session ownership so members only see their own threads, and an optional
+  "must change password on first login" flag (the default `admin`/`admin` account uses it).
 
 ## Quick start
 
@@ -33,11 +34,13 @@ npm install -g @openai/codex     # or: brew install codex
 git clone https://github.com/<you>/codex-web.git && cd codex-web
 cp config.example.json config.json
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"   # paste into sessionSecret
-node user-admin.js add admin 'a-strong-password' --admin
 
 # 3. Run
 node server.js                   # http://127.0.0.1:8790
 ```
+
+Sign in with the default account `admin` / `admin`; you will be required to set a new password
+immediately (minimum 8 characters) before anything else becomes available.
 
 Then open **Settings → Models & API keys** to add a provider (for example DeepSeek with
 `https://api.deepseek.com`, wire API `responses`), or use the CLI:

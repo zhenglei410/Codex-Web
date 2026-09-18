@@ -56,6 +56,7 @@ function publicUser(user) {
     disabled: Boolean(user.disabled),
     createdAt: user.createdAt || "",
     lastLoginAt: user.lastLoginAt || "",
+    mustChangePassword: Boolean(user.mustChangePassword),
     permissions: normalizePermissions(user.permissions, user.role),
   };
 }
@@ -998,11 +999,25 @@ async function serveStatic(req, res, pathname) {
 
 // ---------------------------------------------------------------- router
 
+// 首次登录（或用默认密码登录）必须先改密码：这些接口在改完之前一律不可用
+const PASSWORD_CHANGE_EXEMPT = new Set(["/api/login", "/api/logout", "/api/password", "/api/session"]);
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const { pathname } = url;
 
   try {
+    // 强制改密拦截：只放行登录、退出、改密与 /api/session（前端要靠它跳转改密页）
+    if (pathname.startsWith("/api/") && !PASSWORD_CHANGE_EXEMPT.has(pathname)) {
+      const actor = currentUser(req);
+      if (actor?.user?.mustChangePassword) {
+        return sendJSON(res, 403, {
+          error: "首次登录必须先修改密码，修改后才能使用其他功能",
+          code: "password_change_required",
+        });
+      }
+    }
+
     if (pathname === "/api/login" && req.method === "POST") {
       const body = await readBody(req);
       const ip = clientIp(req);
@@ -1058,6 +1073,8 @@ const server = http.createServer(async (req, res) => {
 
       account.passwordHash = hashPassword(newPassword);
       account.password = "";
+      // 改完密码即解除强制改密状态
+      account.mustChangePassword = false;
       // 只让这个账号的其他设备下线，不影响其他成员
       account.sessionVersion = Number(account.sessionVersion || 0) + 1;
       try {
@@ -1111,6 +1128,8 @@ const server = http.createServer(async (req, res) => {
         role,
         disabled: Boolean(body.disabled),
         createdAt: new Date().toISOString(),
+        // 默认要求新账号首次登录改密码（管理员可以显式关掉）
+        mustChangePassword: body.mustChangePassword === undefined ? true : Boolean(body.mustChangePassword),
         permissions: body.permissions,
       });
       cfg.users.push(user);
@@ -1175,6 +1194,9 @@ const server = http.createServer(async (req, res) => {
       target.displayName = body.displayName === undefined ? target.displayName : String(body.displayName).trim();
       target.role = nextRole;
       target.disabled = nextDisabled;
+      if (body.mustChangePassword !== undefined) {
+        target.mustChangePassword = Boolean(body.mustChangePassword);
+      }
       target.permissions = normalizePermissions(
         body.permissions ? { ...target.permissions, ...body.permissions } : target.permissions,
         nextRole
@@ -1185,6 +1207,8 @@ const server = http.createServer(async (req, res) => {
         target.passwordHash = hashPassword(newPassword);
         target.password = "";
         target.sessionVersion = Number(target.sessionVersion || 0) + 1;
+        // 重置密码后默认要求对方下次登录改密码，除非请求里明确指定
+        if (body.mustChangePassword === undefined) target.mustChangePassword = true;
         passwordReset = true;
       }
       if (body.signOutAll) {
@@ -1438,6 +1462,7 @@ const server = http.createServer(async (req, res) => {
         models: modelOptions(),
         activeProvider: cfg.models.active,
         policy: policySummary(),
+        mustChangePassword: Boolean(actor.user.mustChangePassword),
         codexHome: cfg.codexHome,
       });
     }
@@ -1521,4 +1546,12 @@ const server = http.createServer(async (req, res) => {
 server.listen(cfg.port, cfg.host, () => {
   console.log(`[codex-web] listening on http://${cfg.host}:${cfg.port}`);
   console.log(`[codex-web] codex bin: ${cfg.codexBin} | sandbox: ${cfg.sandbox}`);
+  const pending = cfg.users.filter((user) => user.mustChangePassword && !user.disabled);
+  if (pending.length) {
+    console.warn(
+      `[codex-web] 注意：${pending
+        .map((user) => user.username)
+        .join("、")} 仍在使用初始/临时密码，登录后会要求先修改密码`
+    );
+  }
 });

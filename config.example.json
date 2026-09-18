@@ -1,7 +1,28 @@
 {
   "host": "127.0.0.1",
   "port": 8790,
-  "users": [],
+  "users": [
+    {
+      "username": "admin",
+      "displayName": "管理员",
+      "passwordHash": "scrypt$Z9wVpbHfHWH8wbSHJvIEAg==$7pfJwC/mkRJxysI1jQdnILJ9J9aqvU7fWzma6SMs/ZjrwNKKJf+/1Vjh2O1X+DVPmNgwr+ec9vjevTKH7OEcxg==",
+      "role": "admin",
+      "disabled": false,
+      "sessionVersion": 0,
+      "createdAt": "",
+      "lastLoginAt": "",
+      "mustChangePassword": true,
+      "permissions": {
+        "run": true,
+        "browse": true,
+        "threads": true,
+        "threadsAll": true,
+        "manageUsers": true,
+        "sandboxMax": "danger-full-access",
+        "defaultCwd": "/root"
+      }
+    }
+  ],
   "sessionSecret": "change-me-to-a-long-random-string",
   "sessionTtlHours": 72,
   "codexBin": "/root/.local/bin/codex",

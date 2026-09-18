@@ -73,9 +73,30 @@ cfg.sessionSecret = crypto.randomBytes(32).toString("hex");
 cfg.codexHome = require("path").join(home, ".codex");
 cfg.defaultCwd = home;
 cfg.codexBin = codexBin;
-cfg.users = [];
+// 默认管理员：账号密码都是 admin，登录后强制改密（示例配置里已带好哈希）
+if (!Array.isArray(cfg.users) || !cfg.users.length) {
+  cfg.users = [{
+    username: "admin",
+    displayName: "管理员",
+    passwordHash: hashPassword("admin"),
+    role: "admin",
+    disabled: false,
+    sessionVersion: 0,
+    createdAt: new Date().toISOString(),
+    lastLoginAt: "",
+    mustChangePassword: true,
+    permissions: {
+      run: true, browse: true, threads: true, threadsAll: true, manageUsers: true,
+      sandboxMax: "danger-full-access", defaultCwd: home,
+    },
+  }];
+}
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16);
+  return "scrypt$" + salt.toString("base64") + "$" + crypto.scryptSync(password, salt, 64).toString("base64");
+}
 fs.writeFileSync(target, JSON.stringify(cfg, null, 2) + "\n", { mode: 0o600 });
-console.log("    写入 " + target + "（账号列表为空，稍后用 user-admin.js 创建管理员）");
+console.log("    写入 " + target + "（默认管理员 admin/admin，首次登录会强制改密）");
 ' "$APP_DIR/config.json" "$PORT" "$RUN_HOME" "$CODEX_BIN"
 else
   echo "==> 已存在 config.json，保留不改动"
@@ -97,14 +118,17 @@ fi
 cat <<EOF
 
 安装完成。接下来：
-  1) 创建管理员账号：
-       sudo -u $RUN_USER $NODE_BIN $APP_DIR/user-admin.js add admin '你的强密码' --admin
-  2) 配置模型供应商（也可以稍后在网页里配置）：
+  1) 打开网页用默认账号登录：admin / admin
+     首次登录会被要求修改密码，改完才能使用其他功能（也可以先手工设置一个初始密码）：
+       sudo -u $RUN_USER $NODE_BIN $APP_DIR/user-admin.js passwd admin '你的强密码'
+  2) 配置模型供应商（网页里配置也可以）：
        sudo -u $RUN_USER $NODE_BIN $APP_DIR/model-admin.js add deepseek --name DeepSeek \\
          --base-url https://api.deepseek.com --wire-api responses \\
          --models deepseek-chat,deepseek-reasoner --key sk-xxxx --activate
   3) 重启并检查：
        systemctl restart codex-web && journalctl -u codex-web -f
   4) 用 nginx 反代到 127.0.0.1:$PORT（参考 $APP_DIR/deploy/nginx.conf.example）
+
+注意：默认账号密码是公开的，改密之前不要把服务暴露到公网。
 
 EOF

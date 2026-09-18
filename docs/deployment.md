@@ -132,10 +132,11 @@ sudo bash scripts/install.sh            # 默认装到 /opt/codex-web，注册�
 sudo bash scripts/install.sh --dir /srv/codex-web --user www-data --port 8790
 ```
 
-安装完成后立刻补上管理员账号：
+安装脚本会直接生成默认管理员 **admin / admin**，并且要求首次登录改密。打开网页登录、设置新密码即可；
+如果想在内网先改好再开放端口，也可以直接改配置（不影响强制改密标记）：
 
 ```bash
-sudo -u <运行用户> node /opt/codex-web/user-admin.js add admin '强密码' --admin
+sudo -u <运行用户> node /opt/codex-web/user-admin.js passwd admin '你的强密码'
 sudo systemctl restart codex-web
 ```
 
@@ -146,10 +147,12 @@ sudo mkdir -p /opt/codex-web && sudo cp -r . /opt/codex-web/
 cd /opt/codex-web
 sudo cp config.example.json config.json
 sudo node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"   # 写入 sessionSecret
-sudo node user-admin.js add admin '强密码' --admin
 sudo cp deploy/codex-web.service /etc/systemd/system/codex-web.service
 sudo systemctl daemon-reload && sudo systemctl enable --now codex-web
 ```
+
+手工方式下 `config.example.json` 里已带好默认管理员 `admin / admin`（`mustChangePassword: true`），
+登录后同样会强制改密。
 
 ### 3.3 systemd 单元要点
 
@@ -244,11 +247,12 @@ docker run -d --name codex-web \
 
 ```bash
 docker compose up -d --build
-docker compose exec codex-web node user-admin.js add admin '强密码' --admin
 docker compose exec codex-web node model-admin.js add deepseek --name DeepSeek \
   --base-url https://api.deepseek.com --wire-api responses \
   --models deepseek-chat,deepseek-reasoner --key sk-xxxx --activate
 ```
+
+默认管理员同样是 `admin / admin`，首次登录会要求修改密码。
 
 容器里的要点：
 
@@ -264,8 +268,7 @@ docker compose exec codex-web node model-admin.js add deepseek --name DeepSeek \
 brew install node codex
 git clone https://github.com/<你的账号>/codex-web.git && cd codex-web
 cp config.example.json config.json
-node user-admin.js add admin '强密码' --admin
-node server.js
+node server.js          # 用 admin / admin 登录，首次登录会要求改密
 ```
 
 做成开机自启（launchd）：
@@ -320,8 +323,9 @@ WSL2 默认支持 systemd（Ubuntu 22.04+，若没有可在 `/etc/wsl.conf` 里�
    ```bash
    cd /www/server/codex-web
    cp config.example.json config.json
-   node user-admin.js add admin '强密码' --admin
    ```
+
+   登录用默认账号 `admin / admin`，首次登录会要求修改密码。
 
 4. 在 **网站 → 添加站点** 里创建站点（只作为证书校验的 webroot），然后编辑 nginx 配置，
    把 `location /` 反代到 `http://127.0.0.1:8790`（参考 `deploy/nginx.conf.example`）；
