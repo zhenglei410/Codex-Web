@@ -25,9 +25,14 @@
   "scripts": {
     "start": "node server.js",
     "smoke": "bash scripts/smoke-test.sh",
+    "test": "npm run test:ui",
+    "test:ui": "node scripts/ui-test.mjs",
     "hash-password": "node hash-password.js",
     "user-admin": "node user-admin.js",
     "model-admin": "node model-admin.js"
+  },
+  "devDependencies": {
+    "jsdom": "^30.1.0"
   },
   "engines": {
     "node": ">=20"

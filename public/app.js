@@ -18,6 +18,9 @@ const state = {
   hasNewBelow: false,
   policy: {},
   mustChangePassword: false,
+  // 回答过程中是否自动跟随滚动到底部（用户手动往上翻会暂停跟随）
+  followBottom: true,
+  runNotified: false,
 };
 
 const els = {
@@ -148,6 +151,67 @@ const els = {
 };
 
 // ------------------------------------------------------------------ utils
+
+// ------------------------------------------------------------------ 标签页提示
+//
+// 回答结束时让浏览器标签「闪一下」并保留提示色（favicon 换色 + 标题前缀），
+// 用户回到这个标签页（聚焦 / 切回可见 / 点击按键）后自动恢复。
+const FAVICON_IDLE = "#10a37f";
+const FAVICON_DONE = "#f0a020";
+const PAGE_TITLE = document.title || "Codex Web";
+const faviconLink = document.querySelector('link[rel="icon"]');
+let tabFlashTimers = [];
+let tabAlerting = false;
+
+function faviconDataUri(color) {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">` +
+    `<rect width="32" height="32" rx="8" fill="${color}"/>` +
+    `<path d="M9 20.5l7-11.5 7 11.5z" fill="white"/></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+function setFaviconColor(color) {
+  if (faviconLink) faviconLink.href = faviconDataUri(color);
+}
+
+// 闪烁一次（亮-暗-亮-暗-亮），最后停在提示色上并保持不变
+function flashTabOnce() {
+  clearTabFlash();
+  tabAlerting = true;
+  const sequence = [FAVICON_DONE, FAVICON_IDLE, FAVICON_DONE, FAVICON_IDLE, FAVICON_DONE];
+  sequence.forEach((color, index) => {
+    tabFlashTimers.push(
+      setTimeout(() => {
+        setFaviconColor(color);
+        if (index === sequence.length - 1) {
+          setFaviconColor(FAVICON_DONE);
+          document.title = `✅ ${PAGE_TITLE}`;
+        }
+      }, index * 220)
+    );
+  });
+}
+
+function clearTabFlash() {
+  for (const timer of tabFlashTimers) clearTimeout(timer);
+  tabFlashTimers = [];
+}
+
+function resetTabAlert() {
+  if (!tabAlerting && document.title === PAGE_TITLE) return;
+  clearTabFlash();
+  tabAlerting = false;
+  setFaviconColor(FAVICON_IDLE);
+  document.title = PAGE_TITLE;
+}
+
+window.addEventListener("focus", resetTabAlert);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") resetTabAlert();
+});
+document.addEventListener("pointerdown", resetTabAlert, { passive: true });
+document.addEventListener("keydown", resetTabAlert);
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (c) =>
@@ -623,7 +687,15 @@ function scheduleScrollNav() {
   });
 }
 
-els.messages.addEventListener("scroll", scheduleScrollNav, { passive: true });
+els.messages.addEventListener(
+  "scroll",
+  () => {
+    // 只有用户自己滚动才会离开底部；程序滚动总是落在底部，因此不会误判
+    if (state.running) state.followBottom = isNearBottom(els.messages);
+    scheduleScrollNav();
+  },
+  { passive: true }
+);
 window.addEventListener("resize", scheduleScrollNav);
 
 els.scrollTopBtn.addEventListener("click", () => {
@@ -632,6 +704,7 @@ els.scrollTopBtn.addEventListener("click", () => {
 
 els.scrollBottomBtn.addEventListener("click", () => {
   state.hasNewBelow = false;
+  state.followBottom = true;
   updateScrollNav();
   els.messages.scrollTo({ top: els.messages.scrollHeight, behavior: "smooth" });
 });
@@ -639,7 +712,9 @@ els.scrollBottomBtn.addEventListener("click", () => {
 function scrollToBottom(force = false) {
   const el = els.messages;
   const nearBottom = isNearBottom(el);
-  if (force || nearBottom) {
+  // 任务运行中默认一直跟随底部（除非用户主动往上翻看之前的输出）
+  const following = state.running && state.followBottom;
+  if (force || following || nearBottom) {
     el.scrollTop = el.scrollHeight;
     state.hasNewBelow = false;
   } else {
@@ -869,6 +944,11 @@ function renderItem(turn, item, phase) {
 
 function setRunning(running) {
   state.running = running;
+  // 新任务开始时重新打开「跟随底部」，任务结束也回到跟随状态
+  if (running) {
+    state.followBottom = true;
+    state.runNotified = false;
+  }
   els.sendBtn.disabled = running || !canRunTasks();
   els.stopBtn.classList.toggle("hidden", !running);
   els.statusText.textContent = running ? "Codex 正在执行…" : "就绪";
@@ -917,6 +997,11 @@ function handleEvent(event) {
     case "run.exited":
       turn?.finish();
       if (event.code && event.code !== 0) turn?.addError(`Codex 退出，退出码 ${event.code}`);
+      // 回答结束：标签页闪一次并保留提示色
+      if (!state.runNotified) {
+        state.runNotified = true;
+        flashTabOnce();
+      }
       break;
     default:
       if (event.type) turn?.addLog(`[${event.type}] ${JSON.stringify(event).slice(0, 300)}`);
@@ -991,6 +1076,11 @@ async function sendPrompt(text) {
   } finally {
     state.turn?.clearThinking();
     state.turn?.finish();
+    // 兜底：SSE 中断也要给出「已回答完/已结束」的标签提示
+    if (!state.runNotified) {
+      state.runNotified = true;
+      flashTabOnce();
+    }
     setRunning(false);
     state.runId = null;
     loadThreads();

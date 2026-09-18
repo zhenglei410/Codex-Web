@@ -21,6 +21,7 @@ node --check server.js
 node --check lib/store.js && node --check lib/secrets.js
 node --check user-admin.js && node --check model-admin.js
 bash scripts/smoke-test.sh                  # 不需要真实 API Key，会校验加密、脱敏与权限拦截
+npm install && npm run test:ui              # 前端行为测试（需要 jsdom，仅开发依赖）
 ```
 
 ## 代码约定
