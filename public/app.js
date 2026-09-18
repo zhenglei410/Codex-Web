@@ -641,15 +641,19 @@ async function openThread(id) {
     state.cwd = data.meta.cwd;
     els.cwdLabel.textContent = state.cwd;
   }
+  // 历史消息里，连续的 assistant / tool 消息合并到同一个「Codex」回合下（和实时渲染一致），
+  // 并且不显示执行中的转圈动画
+  let historyTurn = null;
   for (const message of data.messages || []) {
     if (message.role === "user") {
       appendUserTurn(message.text);
+      historyTurn = null;
     } else if (message.role === "assistant") {
-      const turn = createAssistantTurn();
-      turn.addMessage(message.text);
+      if (!historyTurn) historyTurn = createAssistantTurn({ live: false });
+      if (String(message.text || "").trim()) historyTurn.addMessage(message.text);
     } else if (message.role === "tool") {
-      const turn = createAssistantTurn();
-      turn.addToolHistory(message);
+      if (!historyTurn) historyTurn = createAssistantTurn({ live: false });
+      historyTurn.addToolHistory(message);
     }
   }
   renderThreads();
@@ -735,7 +739,8 @@ function appendUserTurn(text) {
   scrollToBottom(true);
 }
 
-function createAssistantTurn() {
+// live=true 表示这是一轮正在执行的任务，标题右侧显示转圈；渲染历史会话时传 false
+function createAssistantTurn({ live = true } = {}) {
   const el = document.createElement("div");
   el.className = "turn assistant";
   el.innerHTML = `<div class="assistant-head"><span class="badge">C</span><span>Codex</span>
@@ -815,7 +820,7 @@ function createAssistantTurn() {
       this.el.querySelector(".spin-wrap").innerHTML = "";
     },
   };
-  el.querySelector(".spin-wrap").innerHTML = `<span class="spinner"></span>`;
+  if (live) el.querySelector(".spin-wrap").innerHTML = `<span class="spinner"></span>`;
   return turn;
 }
 

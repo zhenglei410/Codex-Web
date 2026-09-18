@@ -82,7 +82,23 @@ window.fetch = async (url) => {
       mustChangePassword: false,
     });
   }
-  if (String(url) === "/api/threads") return json({ threads: [] });
+  if (String(url) === "/api/threads") {
+    return json({
+      threads: [{ id: "t-history", title: "历史会话", model: "deepseek-flash", cwd: "/root", updatedAt: new Date().toISOString() }],
+      scoped: false,
+    });
+  }
+  if (String(url) === "/api/threads/t-history") {
+    return json({
+      meta: { id: "t-history", cwd: "/root", model: "deepseek-flash" },
+      messages: [
+        { role: "user", text: "帮我看看目录" },
+        { role: "assistant", text: "第一段回答" },
+        { role: "tool", name: "exec_command", args: '{"cmd":"ls"}', output: "a\nb" },
+        { role: "assistant", text: "第二段回答" },
+      ],
+    });
+  }
   if (String(url) === "/api/run") {
     let index = 0;
     const stream = {
@@ -143,6 +159,18 @@ window.document.dispatchEvent(new window.Event("pointerdown", { bubbles: true })
 await sleep(20);
 check("用户回到页面后 favicon 恢复 #10a37f", iconColor() === "#10a37f");
 check("用户回到页面后标题恢复", window.document.title === "Codex Web");
+
+console.log("== 打开历史会话");
+await sleep(50);
+const threadButton = window.document.querySelector("#threadList button");
+check("侧边栏里有历史会话", Boolean(threadButton));
+threadButton?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+await sleep(80);
+check("历史会话里没有一直转圈的动画", window.document.querySelectorAll(".turn.assistant .spin-wrap .spinner").length === 0);
+check("历史会话里没有 thinking 占位", window.document.querySelectorAll(".turn.assistant .thinking").length === 0);
+check("连续的 assistant/tool 消息合并成一个 Codex 回合", window.document.querySelectorAll(".turn.assistant").length === 1);
+const historyText = window.document.getElementById("messages").textContent;
+check("历史内容都渲染出来了", historyText.includes("第一段回答") && historyText.includes("第二段回答") && historyText.includes("ls"));
 
 console.log(`\n通过 ${pass} 项，失败 ${fail} 项`);
 process.exit(fail ? 1 : 0);

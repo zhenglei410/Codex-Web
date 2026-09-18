@@ -25,7 +25,13 @@
 - **文档**：重写 README，新增 `docs/deployment.md`（各系统部署与 Codex 安装）、
   `docs/models.md`、`docs/permissions.md`、`README.en.md`、`SECURITY.md`、`CONTRIBUTING.md`、
   MIT `LICENSE`、`Dockerfile` / `docker-compose.yml`、`scripts/install.sh`；
-- **冒烟测试**：`scripts/smoke-test.sh`（23 项断言，覆盖加密、脱敏、策略拦截与审计，不需要真实密钥）。
+- **测试**：`scripts/smoke-test.sh`（38 项断言，覆盖加密、脱敏、策略拦截、审计与首次登录改密，
+  不需要真实密钥）+ `scripts/ui-test.mjs`（jsdom，覆盖标签提示、自动贴底与历史会话渲染）。
+
+### 修复
+
+- 打开历史会话时「Codex」标题后面一直在转圈：历史回合不再显示执行中动画
+  （`createAssistantTurn({ live: false })`），并把连续的回答/命令消息合并到同一个回合下渲染。
 
 ### 变更
 
