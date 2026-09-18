@@ -1,0 +1,25 @@
+# systemd 服务单元示例
+#   __APP_DIR__  → 程序目录，例如 /opt/codex-web
+#   __NODE_BIN__ → node 绝对路径，用 `command -v node` 查看
+#   __RUN_USER__ → 运行用户，例如 root 或专用用户 codex
+# scripts/install.sh 会自动替换这些占位符并安装到 /etc/systemd/system/codex-web.service
+[Unit]
+Description=Codex Web - browser client for the local Codex CLI
+Documentation=https://github.com/codex-web/codex-web
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=__APP_DIR__
+ExecStart=__NODE_BIN__ __APP_DIR__/server.js
+Environment=NODE_ENV=production
+# 需要独立指定加密主密钥时打开（与 data/secrets.key 二者取一）
+# Environment=CODEX_WEB_SECRET_KEY=用 openssl rand -hex 32 生成
+Restart=always
+RestartSec=3
+User=__RUN_USER__
+LimitNOFILE=65535
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

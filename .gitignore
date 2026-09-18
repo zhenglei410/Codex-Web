@@ -1,0 +1,17 @@
+# 运行期配置与数据（含密码哈希、会话密钥、加密后的 API Key、审计日志）
+config.json
+data/
+backups-*/
+.env
+
+# 依赖与构建产物
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.DS_Store
+
+# 本地临时文件
+*.log
+*.pid
+*.bak-*
+tmp/

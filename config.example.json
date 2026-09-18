@@ -1,0 +1,46 @@
+{
+  "host": "127.0.0.1",
+  "port": 8790,
+  "users": [],
+  "sessionSecret": "change-me-to-a-long-random-string",
+  "sessionTtlHours": 72,
+  "codexBin": "/root/.local/bin/codex",
+  "codexHome": "/root/.codex",
+  "defaultCwd": "/root",
+  "sandbox": "danger-full-access",
+  "model": "",
+  "maxConcurrentRuns": 3,
+  "maxConcurrentRunsPerUser": 2,
+  "models": {
+    "active": "",
+    "providers": []
+  },
+  "policy": {
+    "enabled": true,
+    "allowedRoots": [],
+    "browseRoots": [],
+    "denyCommands": [
+      "rm\\s+-[a-zA-Z]*r[a-zA-Z]*f?\\s+/(\\s|$)",
+      "rm\\s+-[a-zA-Z]*f[a-zA-Z]*r?\\s+/(\\s|$)",
+      "mkfs(\\.[a-z0-9]+)?\\b",
+      "\\bdd\\b[^\\n]*of=/dev/(sd|nvme|vd|hd)",
+      ">\\s*/dev/(sd|nvme|vd|hd)[a-z0-9]",
+      "\\b(shutdown|reboot|halt|poweroff)\\b",
+      ":\\s*\\(\\s*\\)\\s*\\{.*\\}\\s*;?\\s*:",
+      "\\bchmod\\s+-R\\s+777\\s+/(\\s|$)"
+    ],
+    "protectPaths": [
+      "/etc",
+      "/boot",
+      "/dev",
+      "/proc",
+      "/sys",
+      "/root/.ssh",
+      "/root/.codex",
+      "/root/.gnupg"
+    ],
+    "maxRunMinutes": 0,
+    "allowNetwork": true,
+    "audit": true
+  }
+}

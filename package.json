@@ -1,0 +1,47 @@
+{
+  "name": "codex-web",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ChatGPT-desktop-style multi-user web client for the local Codex CLI, with pluggable model providers (encrypted API keys) and machine-level permission control",
+  "license": "MIT",
+  "homepage": "https://github.com/codex-web/codex-web",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/codex-web/codex-web.git"
+  },
+  "bugs": {
+    "url": "https://github.com/codex-web/codex-web/issues"
+  },
+  "keywords": [
+    "codex",
+    "codex-cli",
+    "chatgpt",
+    "web-ui",
+    "deepseek",
+    "llm",
+    "self-hosted"
+  ],
+  "scripts": {
+    "start": "node server.js",
+    "smoke": "bash scripts/smoke-test.sh",
+    "hash-password": "node hash-password.js",
+    "user-admin": "node user-admin.js",
+    "model-admin": "node model-admin.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "server.js",
+    "user-admin.js",
+    "model-admin.js",
+    "hash-password.js",
+    "lib",
+    "public",
+    "scripts",
+    "docs",
+    "deploy",
+    "config.example.json"
+  ]
+}

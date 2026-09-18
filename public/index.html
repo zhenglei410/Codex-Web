@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Codex Web</title>
+    <meta name="color-scheme" content="dark light" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2310a37f'/%3E%3Cpath d='M9 20l7-11 7 11z' fill='white'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <!-- 登录 -->
+    <div id="loginScreen" class="login-screen hidden">
+      <form id="loginForm" class="login-card">
+        <div class="login-logo">
+          <svg viewBox="0 0 32 32" width="40" height="40" aria-hidden="true">
+            <rect width="32" height="32" rx="9" fill="var(--accent)" />
+            <path d="M9 20.5l7-11.5 7 11.5z" fill="#fff" />
+          </svg>
+        </div>
+        <h1>Codex Web</h1>
+        <p class="login-sub">登录后即可在浏览器里驱动本机 Codex CLI</p>
+        <label>
+          <span>账号</span>
+          <input id="loginUser" type="text" autocomplete="username" value="admin" required />
+        </label>
+        <label>
+          <span>密码</span>
+          <input id="loginPass" type="password" autocomplete="current-password" required />
+        </label>
+        <div id="loginError" class="login-error hidden"></div>
+        <button type="submit" class="primary-btn">登录</button>
+      </form>
+    </div>
+
+    <!-- 主体 -->
+    <div id="app" class="app hidden">
+      <aside id="sidebar" class="sidebar">
+        <div class="sidebar-head">
+          <button id="newChatBtn" class="new-chat">
+            <svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+            新对话
+          </button>
+        </div>
+        <div class="sidebar-search">
+          <input id="searchInput" type="search" placeholder="搜索对话" />
+        </div>
+        <div class="thread-list-wrap" id="threadListWrap">
+          <div class="sidebar-label">最近</div>
+          <nav id="threadList" class="thread-list"></nav>
+        </div>
+        <div class="sidebar-foot">
+          <button id="cwdBtn" class="side-btn" title="选择 Codex 工作目录">
+            <svg viewBox="0 0 24 24" width="16" height="16"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" stroke="currentColor" stroke-width="1.7" fill="none"/></svg>
+            <span id="cwdLabel">/root</span>
+          </button>
+          <button id="settingsBtn" class="side-btn" title="设置" aria-haspopup="dialog">
+            <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M19.4 15a1.7 1.7 0 00.34 1.87l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.7 1.7 0 00-1.87-.34 1.7 1.7 0 00-1.03 1.56V21a2 2 0 01-4 0v-.09A1.7 1.7 0 008.9 19.3a1.7 1.7 0 00-1.87.34l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.7 1.7 0 00.34-1.87 1.7 1.7 0 00-1.56-1.03H3a2 2 0 010-4h.09A1.7 1.7 0 004.7 8.9a1.7 1.7 0 00-.34-1.87l-.06-.06a2 2 0 012.83-2.83l.06.06a1.7 1.7 0 001.87.34H9a1.7 1.7 0 001.03-1.56V3a2 2 0 014 0v.09a1.7 1.7 0 001.03 1.56 1.7 1.7 0 001.87-.34l.06-.06a2 2 0 012.83 2.83l-.06.06a1.7 1.7 0 00-.34 1.87V9a1.7 1.7 0 001.56 1.03H21a2 2 0 010 4h-.09a1.7 1.7 0 00-1.51 1.03z" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>设置</span>
+          </button>
+          <div class="user-chip"><span class="avatar" id="userAvatar">A</span><span id="userName">admin</span><span id="userRoleChip" class="role-chip hidden"></span></div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <button id="sidebarToggle" class="icon-btn" title="收起侧边栏">
+            <svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/></svg>
+          </button>
+          <div class="topbar-title" id="topbarTitle">新对话</div>
+          <div class="topbar-right">
+            <label class="select-wrap" title="模型（留空使用配置文件默认值）">
+              <select id="modelSelect">
+                <option value="">默认模型</option>
+                <option value="deepseek-flash">deepseek-flash</option>
+                <option value="deepseek-v4-pro">deepseek-v4-pro</option>
+              </select>
+            </label>
+            <label class="select-wrap" title="权限模式">
+              <select id="sandboxSelect">
+                <option value="danger-full-access">完全访问</option>
+                <option value="workspace-write">工作区可写</option>
+                <option value="read-only">只读</option>
+              </select>
+            </label>
+          </div>
+        </header>
+
+        <div class="thread-view">
+          <div id="messages" class="messages">
+            <div id="emptyState" class="empty-state">
+              <div class="empty-logo">
+                <svg viewBox="0 0 32 32" width="46" height="46"><rect width="32" height="32" rx="9" fill="var(--accent)"/><path d="M9 20.5l7-11.5 7 11.5z" fill="#fff"/></svg>
+              </div>
+              <h2>有什么可以帮你的？</h2>
+              <p>输入任务后，Codex 会在 <code id="emptyCwd">/root</code> 下读取文件、执行命令并给出结果。</p>
+              <div class="suggestions">
+                <button data-prompt="看一下当前目录里有什么，并总结这个项目是做什么的">了解当前目录项目</button>
+                <button data-prompt="检查系统磁盘、内存和负载情况，给出简要报告">检查系统状态</button>
+                <button data-prompt="列出最近修改过的 10 个文件">最近修改的文件</button>
+              </div>
+            </div>
+          </div>
+          <div id="scrollNav" class="scroll-nav hidden" role="group" aria-label="快速滚动">
+            <button type="button" id="scrollTopBtn" class="scroll-btn" title="回到最顶端" aria-label="回到最顶端">
+              <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M12 19V6M6 12l6-6 6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button type="button" id="scrollBottomBtn" class="scroll-btn" title="跳到最底部" aria-label="跳到最底部">
+              <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M12 5v13M6 12l6 6 6-6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="composer-wrap">
+          <form id="composer" class="composer">
+            <textarea id="promptInput" rows="1" placeholder="给 Codex 下达任务…（Enter 发送，Shift+Enter 换行）"></textarea>
+            <div class="composer-bar">
+              <div class="composer-meta">
+                <span id="statusText" class="status-text">就绪</span>
+              </div>
+              <div class="composer-buttons">
+                <button type="button" id="stopBtn" class="stop-btn hidden">停止</button>
+                <button type="submit" id="sendBtn" class="send-btn" title="发送">
+                  <svg viewBox="0 0 24 24" width="18" height="18"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+              </div>
+            </div>
+          </form>
+          <div class="composer-note">Codex 拥有本机完整权限，请谨慎下达指令。</div>
+        </div>
+      </main>
+    </div>
+
+    <!-- 目录选择 -->
+    <div id="cwdModal" class="modal hidden">
+      <div class="modal-card">
+        <div class="modal-head">
+          <strong>选择工作目录</strong>
+          <button id="cwdClose" class="icon-btn">✕</button>
+        </div>
+        <div class="modal-path">
+          <button id="cwdUp" class="icon-btn" title="上级目录">↑</button>
+          <input id="cwdPath" type="text" spellcheck="false" />
+          <button id="cwdGo" class="ghost-btn">前往</button>
+        </div>
+        <div id="cwdList" class="cwd-list"></div>
+        <div class="modal-foot">
+          <span id="cwdHint" class="muted"></span>
+          <button id="cwdPick" class="primary-btn">使用当前目录</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 账号与权限（仅管理员可见） -->
+    <div id="usersModal" class="modal hidden">
+      <div class="modal-card wide">
+        <div class="modal-head">
+          <strong>账号与权限</strong>
+          <button id="usersClose" class="icon-btn">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="users-toolbar">
+            <button id="userNewBtn" class="primary-btn">新增账号</button>
+            <span id="usersHint" class="muted"></span>
+          </div>
+          <div id="usersList" class="users-list"></div>
+
+          <form id="userForm" class="user-form hidden">
+            <div class="user-form-head">
+              <strong id="userFormTitle">新增账号</strong>
+              <button type="button" id="userFormClose" class="icon-btn">✕</button>
+            </div>
+            <div class="grid-2">
+              <label><span>账号</span><input id="ufUsername" type="text" autocomplete="off" spellcheck="false" required /></label>
+              <label><span>显示名（可选）</span><input id="ufDisplay" type="text" autocomplete="off" /></label>
+            </div>
+            <label>
+              <span id="ufPasswordLabel">密码（至少 8 位）</span>
+              <input id="ufPassword" type="password" autocomplete="new-password" />
+            </label>
+            <div class="grid-2">
+              <label>
+                <span>角色</span>
+                <select id="ufRole">
+                  <option value="member">普通成员</option>
+                  <option value="admin">管理员</option>
+                </select>
+              </label>
+              <label>
+                <span>权限上限</span>
+                <select id="ufSandbox">
+                  <option value="read-only">只读</option>
+                  <option value="workspace-write">工作区可写</option>
+                  <option value="danger-full-access">完全访问</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              <span>默认工作目录</span>
+              <input id="ufCwd" type="text" spellcheck="false" />
+            </label>
+            <div class="perm-grid">
+              <label class="perm"><input id="ufRun" type="checkbox" /><span>提交任务</span></label>
+              <label class="perm"><input id="ufBrowse" type="checkbox" /><span>浏览目录</span></label>
+              <label class="perm"><input id="ufThreads" type="checkbox" /><span>查看自己的会话</span></label>
+              <label class="perm"><input id="ufThreadsAll" type="checkbox" /><span>查看他人会话</span></label>
+              <label class="perm"><input id="ufManage" type="checkbox" /><span>管理账号</span></label>
+              <label class="perm"><input id="ufDisabled" type="checkbox" /><span>禁用账号</span></label>
+            </div>
+            <div id="userFormError" class="login-error hidden"></div>
+            <div class="modal-foot">
+              <span class="muted" id="userFormNote"></span>
+              <button type="submit" class="primary-btn">保存</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <!-- 设置 -->
+    <div id="settingsModal" class="modal hidden">
+      <div class="modal-card settings-card">
+        <div class="modal-head">
+          <strong>设置</strong>
+          <button id="settingsClose" class="icon-btn">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="settings-group">
+            <div class="settings-group-title">外观</div>
+            <div class="settings-row">
+              <span>主题</span>
+              <div class="segmented" id="themeSegmented">
+                <button type="button" class="seg-btn" data-theme-value="dark">深色</button>
+                <button type="button" class="seg-btn" data-theme-value="light">浅色</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="settings-group-title">账号</div>
+            <div class="settings-row">
+              <span class="settings-user">
+                <span class="avatar small" id="stUserAvatar">A</span>
+                <span id="stUserName">admin</span>
+              </span>
+              <span id="stUserRoleChip" class="role-chip hidden"></span>
+            </div>
+            <button id="settingsUsersBtn" type="button" class="settings-item hidden">
+              <svg viewBox="0 0 24 24" width="16" height="16"><path d="M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zm7.5 0a2.75 2.75 0 100-5.5 2.75 2.75 0 000 5.5zM3 19.5c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5M17.5 14c2.5.3 4 2.2 4 4.6" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/></svg>
+              <span>账号与权限管理</span>
+            </button>
+            <button id="settingsModelsBtn" type="button" class="settings-item hidden">
+              <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5" stroke="currentColor" stroke-width="1.7" fill="none"/></svg>
+              <span>模型与 API Key</span>
+            </button>
+            <button id="settingsPolicyBtn" type="button" class="settings-item hidden">
+              <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 3l7 3v5.5c0 4.3-2.9 7.9-7 9.5-4.1-1.6-7-5.2-7-9.5V6z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><path d="M9 12l2.2 2.2L15.5 10" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/></svg>
+              <span>本机权限与审计</span>
+            </button>
+            <button id="settingsPwdBtn" type="button" class="settings-item">
+              <svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 11V8a5 5 0 0110 0v3M6 11h12a1 1 0 011 1v7a1 1 0 01-1 1H6a1 1 0 01-1-1v-7a1 1 0 011-1z" stroke="currentColor" stroke-width="1.7" fill="none"/></svg>
+              <span>修改登录密码</span>
+            </button>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <span class="muted">Codex Web</span>
+          <button id="settingsLogoutBtn" type="button" class="ghost-btn danger">退出登录</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 模型与 API Key（仅管理员可见） -->
+    <div id="modelsModal" class="modal hidden">
+      <div class="modal-card wide">
+        <div class="modal-head">
+          <strong>模型与 API Key</strong>
+          <button id="modelsClose" class="icon-btn">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="users-toolbar">
+            <button id="modelNewBtn" class="primary-btn">新增供应商</button>
+            <span id="modelsHint" class="muted"></span>
+          </div>
+          <div id="modelsList" class="users-list"></div>
+
+          <form id="modelForm" class="user-form hidden">
+            <div class="user-form-head">
+              <strong id="modelFormTitle">新增供应商</strong>
+              <button type="button" id="modelFormClose" class="icon-btn">✕</button>
+            </div>
+            <div class="grid-2">
+              <label>
+                <span>供应商 ID（用于命令行参数）</span>
+                <input id="mfId" type="text" spellcheck="false" placeholder="deepseek" autocomplete="off" />
+              </label>
+              <label>
+                <span>显示名称</span>
+                <input id="mfName" type="text" placeholder="DeepSeek" autocomplete="off" />
+              </label>
+            </div>
+            <label>
+              <span>API Base URL</span>
+              <input id="mfBaseUrl" type="text" spellcheck="false" placeholder="https://api.deepseek.com" autocomplete="off" />
+            </label>
+            <div class="grid-2">
+              <label>
+                <span>接口类型</span>
+                <select id="mfWireApi">
+                  <option value="responses">responses（Codex / OpenAI Responses 兼容）</option>
+                  <option value="chat">chat（OpenAI Chat Completions 兼容）</option>
+                </select>
+              </label>
+              <label>
+                <span>密钥环境变量名</span>
+                <input id="mfEnvKey" type="text" spellcheck="false" placeholder="DEEPSEEK_API_KEY" autocomplete="off" />
+              </label>
+            </div>
+            <label>
+              <span id="mfApiKeyLabel">API Key（加密保存，留空表示不修改）</span>
+              <input id="mfApiKey" type="password" autocomplete="new-password" placeholder="sk-…" />
+            </label>
+            <div class="grid-2">
+              <label>
+                <span>模型列表（逗号或空格分隔）</span>
+                <input id="mfModels" type="text" spellcheck="false" placeholder="deepseek-chat, deepseek-reasoner" autocomplete="off" />
+              </label>
+              <label>
+                <span>默认模型（留空用列表第一个）</span>
+                <input id="mfDefault" type="text" spellcheck="false" autocomplete="off" />
+              </label>
+            </div>
+            <div class="grid-2">
+              <label>
+                <span>模型目录文件（可选）</span>
+                <input id="mfCatalog" type="text" spellcheck="false" placeholder="~/.codex/models.json" autocomplete="off" />
+              </label>
+              <label>
+                <span>推理强度（可选）</span>
+                <select id="mfReasoning">
+                  <option value="">跟随 Codex 默认</option>
+                  <option value="minimal">minimal</option>
+                  <option value="low">low</option>
+                  <option value="medium">medium</option>
+                  <option value="high">high</option>
+                  <option value="max">max</option>
+                </select>
+              </label>
+            </div>
+            <div class="perm-grid">
+              <label class="perm"><input id="mfActive" type="checkbox" /><span>设为默认供应商</span></label>
+              <label class="perm"><input id="mfNoSave" type="checkbox" /><span>不保存密钥，只从环境变量读取</span></label>
+            </div>
+            <div id="modelFormError" class="login-error hidden"></div>
+            <div class="modal-foot">
+              <span class="muted" id="modelFormNote"></span>
+              <button type="submit" class="primary-btn">保存</button>
+            </div>
+          </form>
+        </div>
+        <div class="modal-foot">
+          <span class="muted">密钥以 AES-256-GCM 密文写入 config.json，仅在运行任务时注入子进程环境变量</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 本机权限与审计（仅管理员可见） -->
+    <div id="policyModal" class="modal hidden">
+      <div class="modal-card wide">
+        <div class="modal-head">
+          <strong>本机权限与审计</strong>
+          <button id="policyClose" class="icon-btn">✕</button>
+        </div>
+        <div class="modal-body">
+          <form id="policyForm" class="user-form">
+            <div class="policy-note">
+              这些规则对<strong>所有账号</strong>生效：限制 Codex 能进入的目录、能执行的命令、不能写入的路径，
+              超出范围的任务会被立即终止。它属于产品层面的护栏，不是操作系统级隔离。
+            </div>
+            <div class="perm-grid">
+              <label class="perm"><input id="pfEnabled" type="checkbox" /><span>启用本机权限策略</span></label>
+              <label class="perm"><input id="pfNetwork" type="checkbox" /><span>允许 Workspace 沙箱联网</span></label>
+              <label class="perm"><input id="pfAudit" type="checkbox" /><span>记录审计日志</span></label>
+            </div>
+            <label>
+              <span>允许的工作目录（每行一个，留空表示不限制）</span>
+              <textarea id="pfRoots" rows="3" spellcheck="false" placeholder="/root&#10;/home/site/projects"></textarea>
+            </label>
+            <label>
+              <span>目录浏览范围（每行一个，留空则与上一项相同）</span>
+              <textarea id="pfBrowse" rows="2" spellcheck="false" placeholder="/root"></textarea>
+            </label>
+            <label>
+              <span>禁止执行的命令（每行一条正则，命中立即终止任务）</span>
+              <textarea id="pfDeny" rows="4" spellcheck="false"></textarea>
+            </label>
+            <label>
+              <span>受保护路径（每行一个路径前缀，写入即终止任务）</span>
+              <textarea id="pfProtect" rows="4" spellcheck="false"></textarea>
+            </label>
+            <div class="grid-3">
+              <label>
+                <span>单任务最长运行（分钟，0=不限）</span>
+                <input id="pfMaxMinutes" type="number" min="0" max="1440" />
+              </label>
+              <label>
+                <span>全局并发上限</span>
+                <input id="pfGlobalRuns" type="number" min="1" max="50" />
+              </label>
+              <label>
+                <span>单账号并发上限</span>
+                <input id="pfUserRuns" type="number" min="1" max="50" />
+              </label>
+            </div>
+            <div id="policyError" class="login-error hidden"></div>
+            <div class="modal-foot">
+              <span class="muted" id="policyHint"></span>
+              <button type="submit" class="primary-btn">保存策略</button>
+            </div>
+          </form>
+
+          <div class="settings-group">
+            <div class="settings-group-title">最近任务审计（最新 50 条）</div>
+            <div id="auditList" class="audit-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 修改密码 -->
+    <div id="pwdModal" class="modal hidden">
+      <form id="pwdForm" class="modal-card small">
+        <div class="modal-head">
+          <strong>修改登录密码</strong>
+          <button type="button" id="pwdClose" class="icon-btn">✕</button>
+        </div>
+        <div class="modal-body">
+          <label><span>当前密码</span><input id="pwdCurrent" type="password" autocomplete="current-password" required /></label>
+          <label><span>新密码（至少 8 位）</span><input id="pwdNew" type="password" autocomplete="new-password" minlength="8" required /></label>
+          <label><span>确认新密码</span><input id="pwdConfirm" type="password" autocomplete="new-password" minlength="8" required /></label>
+          <div id="pwdError" class="login-error hidden"></div>
+        </div>
+        <div class="modal-foot">
+          <span class="muted">保存后其他设备的登录状态会立即失效</span>
+          <button type="submit" class="primary-btn">保存</button>
+        </div>
+      </form>
+    </div>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

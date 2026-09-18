@@ -1,0 +1,28 @@
+services:
+  codex-web:
+    build: .
+    image: codex-web:latest
+    container_name: codex-web
+    restart: unless-stopped
+    ports:
+      # 默认只绑定宿主机回环地址，对外请用 nginx 反代
+      - "${CODEX_WEB_PORT:-127.0.0.1:8790}:8790"
+    environment:
+      NODE_ENV: production
+      CODEX_WEB_CONFIG: /app/config.json
+      CODEX_WEB_DATA_DIR: /app/data
+      CODEX_HOME: /home/node/.codex
+      # 留空则使用 data/secrets.key；推荐填 openssl rand -hex 32 的结果
+      CODEX_WEB_SECRET_KEY: ${CODEX_WEB_SECRET_KEY:-}
+    volumes:
+      # 先 cp config.example.json config.json（compose 不会自动创建文件）
+      - ./config.json:/app/config.json
+      - ./data:/app/data
+      # 需要 Codex 操作的工作目录；网页里选择 /workspace
+      - ${CODEX_WEB_WORKSPACE:-./workspace}:/workspace
+      # 需要复用宿主机 Codex 登录态时打开（先 docker compose exec codex-web codex login 也行）
+      - ${HOME}/.codex:/home/node/.codex
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
